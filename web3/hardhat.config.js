@@ -1,15 +1,16 @@
 /** @type import('hardhat/config').HardhatUserConfig */
 
-const PRIVATE_KEY = "YOUR PRIVATE KEY";
-const RPC_URL = "https://rpc.ankr.com/polygon_mumbai";
+const PRIVATE_KEY =
+  "ee15c07aacb21f3760c88b7ec9743d0ae762d7059e0e24a272e5cdb49ad31a68";
+const SEPOLIA_RPC_URL = "https://rpc.sepolia.org";
 module.exports = {
-  defaultNetwork: "polygon_mumbai",
+  defaultNetwork: "sepolia",
   networks: {
     hardhat: {
-      chainId: 80001,
+      chainId: 11155111,
     },
-    polygon_mumbai: {
-      url: "https://rpc.ankr.com/polygon_mumbai",
+    sepolia: {
+      url: SEPOLIA_RPC_URL,
       accounts: [`0x${PRIVATE_KEY}`],
     },
   },
