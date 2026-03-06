@@ -18,32 +18,38 @@ export const StateContextProvider = ({ children }) => {
   );
   const address = useAddress();
   const connect = useMetamask();
-
   const disconnect = useDisconnect();
   const signer = useSigner();
 
   const [userBalance, setUserBalance] = useState();
   const [loading, setLoading] = useState(false);
+  const [nfts, setNfts] = useState([]);
 
   const fetchData = async () => {
+    if (!signer || !address) return;
+
     try {
-      const balance = await signer?.getBalance();
-      const uBalance = address
-        ? ethers.utils.formatEther(balance?.toString())
-        : "";
+      const balance = await signer.getBalance();
+      const uBalance = ethers.utils.formatEther(balance.toString());
       setUserBalance(uBalance);
     } catch (error) {
-      console.log(error);
+      console.error("Error fetching balance:", error);
     }
   };
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [address, signer]);
 
   const UploadImage = async (imageInfo) => {
+    if (!contract || !address) {
+      console.error("Contract or address not available");
+      return;
+    }
+
     setLoading(true);
     const { title, description, email, category, image } = imageInfo;
+
     try {
       const listingPrice = await contract.call("listingPrice");
       const createNFTs = await contract.call(
@@ -54,70 +60,72 @@ export const StateContextProvider = ({ children }) => {
         },
       );
 
-      const response = await axios({
+      await axios({
         method: "POST",
         url: `/api/v1/NFTs`,
         data: {
-          title: title,
-          description: description,
-          email: email,
-          category: category,
-          image: image,
-          address: address,
+          title,
+          description,
+          email,
+          category,
+          image,
+          address,
         },
       });
-      console.log(response);
+
       console.info("Contract call success", createNFTs);
 
-      setLoading(false);
-      window.location.reload();
+      // 重新获取NFT列表而不是刷新页面
+      getUploadedImages();
     } catch (error) {
-      console.log("contract call failure", error);
+      console.error("Contract call failure:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const getUploadedImages = async () => {
+    if (!contract) return [];
+
     try {
       const totalUpload = await contract.call("imagesCount");
-      console.log("totalUpload", totalUpload);
 
       if (totalUpload.toNumber() === 0) {
-        console.log("No NFTs uploaded yet");
+        setNfts([]);
         return [];
       }
 
       const images = await contract.call("getAllNFTs");
-
       const listingPrice = await contract.call("listingPrice");
-      console.log("listingPrice", listingPrice);
 
-      const allImages = images.map((image, i) => {
-        console.log(`Processing image ${i}:`, image);
-        return {
-          owner: image.creator,
-          title: image.title,
-          description: image.description,
-          email: image.email,
-          category: image.category,
-          fundraised: image.fundraised,
-          image: image.image,
-          imageID: image.id ? image.id.toNumber() : i,
-          createdAt: image.timestamp ? image.timestamp.toNumber() : Date.now(),
-          listedAmount: ethers.utils.formatEther(listingPrice.toString()),
-          totalUpload: totalUpload.toNumber(),
-        };
-      });
+      const allImages = images.map((image, i) => ({
+        owner: image.creator,
+        title: image.title,
+        description: image.description,
+        email: image.email,
+        category: image.category,
+        fundraised: image.fundraised,
+        image: image.image,
+        imageID: image.id ? image.id.toNumber() : i,
+        createdAt: image.timestamp ? image.timestamp.toNumber() : Date.now(),
+        listedAmount: ethers.utils.formatEther(listingPrice.toString()),
+        totalUpload: totalUpload.toNumber(),
+      }));
+
+      setNfts(allImages);
       return allImages;
     } catch (error) {
-      console.log("getUploadedImages error:", error);
+      console.error("getUploadedImages error:", error);
       return [];
     }
   };
 
   const singleImage = async (id) => {
+    if (!contract) return null;
+
     try {
       const data = await contract.call("getImage", [id]);
-      const image = {
+      return {
         title: data[0],
         description: data[1],
         email: data[2],
@@ -128,40 +136,58 @@ export const StateContextProvider = ({ children }) => {
         createdAt: data[7].toNumber(),
         imageId: data[8].toNumber(),
       };
-      return image;
     } catch (error) {
-      console.log("contract call singImage failure", error);
+      console.error("contract call singImage failure:", error);
+      return null;
     }
   };
 
   const donateFund = async ({ amount, id }) => {
+    if (!contract || !address) {
+      console.error("Contract or address not available");
+      return;
+    }
+
     try {
-      console.log(amount, id);
       const transaction = await contract.call("donateToImage", [id], {
         value: amount.toString(),
       });
-      console.log(transaction);
 
-      window.location.reload();
+      console.log("Donation transaction:", transaction);
+
+      // 重新获取NFT列表而不是刷新页面
+      getUploadedImages();
+      return transaction;
     } catch (error) {
-      console.log("donateToImage failure", error);
+      console.error("donateToImage failure:", error);
+      throw error;
     }
   };
 
   const getAllNFTsAPI = async () => {
-    const response = await axios({
-      method: "GET",
-      url: "/api/v1/NFTs",
-    });
-    console.log("getAllNFTsAPI", response);
+    try {
+      const response = await axios({
+        method: "GET",
+        url: "/api/v1/NFTs",
+      });
+      return response.data;
+    } catch (error) {
+      console.error("getAllNFTsAPI error:", error);
+      return [];
+    }
   };
 
   const getSingleNFTsAPI = async (id) => {
-    const response = await axios({
-      method: "GET",
-      url: `/api/v1/NFTs/${id}`,
-    });
-    console.log("getSingleNFTsAPI", response);
+    try {
+      const response = await axios({
+        method: "GET",
+        url: `/api/v1/NFTs/${id}`,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("getSingleNFTsAPI error:", error);
+      return null;
+    }
   };
 
   return (
@@ -181,6 +207,7 @@ export const StateContextProvider = ({ children }) => {
         donateFund,
         getAllNFTsAPI,
         getSingleNFTsAPI,
+        nfts,
       }}
     >
       {children}

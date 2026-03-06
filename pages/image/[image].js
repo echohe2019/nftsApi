@@ -28,65 +28,61 @@ const imageDetail = () => {
   const [allImages, setAllImages] = useState([]);
   const [notification, setNotification] = useState("");
   const [support, setSupport] = useState("");
-  const [image, setImage] = useState();
+  const [image, setImage] = useState(null);
 
   const fetchImages = async () => {
+    if (!contract || !query.image) return;
+
     try {
-      console.log("query:", query);
-      console.log("query.image:", query.image);
-
-      if (!query.image) {
-        console.error("Image ID is undefined");
-        return;
-      }
-
       const imageId = parseInt(query.image);
-      console.log("parsed imageId:", imageId);
 
       if (isNaN(imageId)) {
-        console.error("Invalid image ID:", query.image);
+        setNotification("Invalid image ID");
         return;
       }
 
       const oneImage = await singleImage(imageId);
       const images = await getUploadedImages();
+
       setAllImages(images);
       setImage(oneImage);
-      console.log(oneImage);
     } catch (error) {
       console.error("fetchImages error:", error);
+      setNotification("Failed to load image details");
     }
   };
 
   useEffect(() => {
-    console.log(
-      "useEffect triggered, contract:",
-      contract,
-      "query.image:",
-      query.image,
-    );
-    if (contract && query.image) {
-      fetchImages();
-    }
+    fetchImages();
   }, [address, contract, query.image]);
 
   const donateAmount = async () => {
+    if (!support || isNaN(support) || parseFloat(support) <= 0) {
+      setNotification("Please enter a valid donation amount");
+      return;
+    }
+
     try {
-      if (!support || isNaN(support) || parseFloat(support) <= 0) {
-        setNotification("Please enter a valid donation amount");
+      setLoading(true);
+      const imageId = parseInt(query.image);
+
+      if (isNaN(imageId)) {
+        setNotification("Invalid image ID");
         return;
       }
 
-      setLoading(true);
       await donateFund({
         amount: ethers.utils.parseUnits(support.toString(), 18),
-        id: parseInt(query.image),
+        id: imageId,
       });
-      setLoading(false);
+
       setNotification("Donation successful!");
+      setSupport("");
+      fetchImages();
     } catch (error) {
       console.error("donateAmount error:", error);
       setNotification("Donation failed. Please try again.");
+    } finally {
       setLoading(false);
     }
   };
@@ -94,7 +90,7 @@ const imageDetail = () => {
   return (
     <div className="home">
       <Header notification={notification} setNotification={setNotification} />
-      {image == undefined ? (
+      {!image ? (
         <Logo />
       ) : (
         <Product
@@ -107,10 +103,10 @@ const imageDetail = () => {
       )}
       <div className="card">
         {allImages
-          .map((image, i) => (
+          .map((img, i) => (
             <Card
               key={i + 1}
-              image={image}
+              image={img}
               index={i}
               setNotification={setNotification}
             />
@@ -118,7 +114,7 @@ const imageDetail = () => {
           .slice(0, 8)}
       </div>
       <Footer />
-      {notification != "" && (
+      {notification && (
         <Notification
           notification={notification}
           setNotification={setNotification}
